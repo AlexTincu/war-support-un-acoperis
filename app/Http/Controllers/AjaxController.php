@@ -25,6 +25,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use libphonenumber\NumberParseException;
 use libphonenumber\PhoneNumber;
 use libphonenumber\PhoneNumberUtil;
@@ -68,7 +69,7 @@ class AjaxController extends Controller
     public function uaCities(int $regionId)
     {
         return response()->json(
-            UaCity::whereHas("region", function ($q) use($regionId){
+            UaCity::whereHas("region", function ($q) use ($regionId) {
                 $q->where("ua_regions.id", $regionId);
             })->pluck('city_uk', 'id')->all()
         );
@@ -101,7 +102,8 @@ class AjaxController extends Controller
                 if ($startDate->year >= 2020) {
                     $query->where('help_requests.created_at', '>=', $startDate);
                 }
-            } catch (\Exception $exception) { }
+            } catch (\Exception $exception) {
+            }
         }
 
         if ($request->has('endDate')) {
@@ -111,7 +113,12 @@ class AjaxController extends Controller
                 if ($endDate->year >= 2020) {
                     $query->where('help_requests.created_at', '<=', $endDate);
                 }
-            } catch (\Exception $exception) { }
+            } catch (\Exception $exception) {
+            }
+        }
+
+        if (auth()->user()->hasRole(User::ROLE_TRUSTED)) {
+            $query->where('created_by', auth()->user()->id);
         }
 
         $query->select([
@@ -121,9 +128,9 @@ class AjaxController extends Controller
             'help_requests.need_car',
             'help_requests.need_special_transport',
             'help_requests.special_needs',
-            'help_requests.known_languages',
+            'help_requests.guests_number',
             'help_requests.created_at'
-        ])->join('users', 'help_requests.user_id', '=', 'users.id' );
+        ])->join('users', 'help_requests.user_id', '=', 'users.id');
 
         $perPage = 10;
 
@@ -161,6 +168,30 @@ class AjaxController extends Controller
         /** @var HelpRequest $helpRequest */
         $helpRequest = HelpRequest::find($helpRequestType->help_request_id);
         $helpRequest->updateStatus();
+
+        return response()->json(['success' => 'true', 'requestStatus' => $helpRequest->status]);
+    }
+
+    /**
+     * @param $id
+     * @return JsonResponse
+     */
+    public function updateHelpRequestStatus(Request $request, $id)
+    {
+        $attributes = $request->validate([
+            'status' => ['required', Rule::in(
+                array_keys(HelpRequest::statusList())
+            )]
+        ]);
+
+        $helpRequest = HelpRequest::find($id);
+
+        if (empty($helpRequest)) {
+            abort(404);
+        }
+
+        $helpRequest->status = $attributes['status'];
+        $helpRequest->save();
 
         return response()->json(['success' => 'true', 'requestStatus' => $helpRequest->status]);
     }
@@ -215,8 +246,8 @@ class AjaxController extends Controller
             'success' => 'true',
             'noteId' => $note->id,
             'noteDate' => formatDateTime($note->created_at),
-            'noteUser' => $note->user->name]
-        );
+            'noteUser' => $note->user->name,
+        ]);
     }
 
     /**
@@ -326,7 +357,7 @@ class AjaxController extends Controller
         // Determine locale from referer url for toast messages
         $referer = parse_url(request()->headers->get('referer'));
         $path = array_values(array_filter(explode('/', $referer['path'])));
-        $locale = in_array($path[0] ?? '', config('translatable.locales') ) ?
+        $locale = in_array($path[0] ?? '', config('translatable.locales')) ?
             $path[0] :
             null;
 
@@ -445,7 +476,8 @@ class AjaxController extends Controller
                 if ($startDate->year >= 2020) {
                     $query->where('help_resource_types.created_at', '>=', $startDate);
                 }
-            } catch (\Exception $exception) { }
+            } catch (\Exception $exception) {
+            }
         }
 
         if ($request->has('endDate')) {
@@ -455,7 +487,8 @@ class AjaxController extends Controller
                 if ($endDate->year >= 2020) {
                     $query->where('help_resource_types.created_at', '<=', $endDate);
                 }
-            } catch (\Exception $exception) { }
+            } catch (\Exception $exception) {
+            }
         }
 
 
@@ -656,7 +689,7 @@ class AjaxController extends Controller
             $query->where('accommodations.address_city', '=', $request->get('city'));
         }
         if (auth()->user()->isTrusted()) {
-            $query->where('accommodations.created_by',auth()->user()->id);
+            $query->where('accommodations.created_by', auth()->user()->id);
         }
 
         $query = $this->filterStatus($request, $query, 'accommodations');
@@ -784,8 +817,9 @@ class AjaxController extends Controller
     public function accommodationRequestsList(int $id, Request $request)
     {
         /** @var Accommodation|null $query */
-        $query = Accommodation::join('help_request_accommodation_details', 'help_request_accommodation_details.accommodation_id', '=', 'accommodations.id')
-            ->join('help_requests', 'help_request_accommodation_details.help_request_id', '=', 'help_requests.id')
+        $query = Accommodation::join('allocations', 'allocations.accommodation_id', '=', 'accommodations.id')
+            ->join('help_requests', 'allocations.help_request_id', '=', 'help_requests.id')
+            ->join('users', 'users.id', '=', 'help_requests.user_id')
             ->where('accommodations.id', '=', $id);
 
         $perPage = 10;
@@ -796,14 +830,13 @@ class AjaxController extends Controller
 
         $query->select([
             'help_requests.id',
-            'help_requests.patient_full_name',
-            'help_requests.caretaker_full_name',
-            'help_request_accommodation_details.guests_number',
-            'help_request_accommodation_details.start_date',
-            'help_request_accommodation_details.end_date',
+            'users.name',
+            'allocations.number_of_guest',
+            'allocations.created_at',
+            'allocations.updated_at',
         ]);
 
-        $query->orderBy('help_request_accommodation_details.start_date', 'desc');
+        $query->orderBy('allocations.created_at', 'desc');
 
         return response()->json(
             $query->paginate($perPage)
@@ -820,7 +853,8 @@ class AjaxController extends Controller
         $localPhone = $intlPhone = $mask = null;
 
         if (!empty($countryCode)) {
-            $mask = $phoneUtil->getExampleNumber($countryCode)->getNationalNumber();;
+            $mask = $phoneUtil->getExampleNumber($countryCode)->getNationalNumber();
+
             if (!empty($phoneNumber)) {
                 try {
                     /** @var PhoneNumber $parsedPhoneNumber */
@@ -833,7 +867,6 @@ class AjaxController extends Controller
                     $intlPhone = $parsedPhoneNumber->getCountryCode() . $parsedPhoneNumber->getNationalNumber();
                     $countryCode = !empty($country) ? $country->code : $countryCode;
                 } catch (NumberParseException $exception) {
-
                 }
             }
         }
@@ -875,7 +908,6 @@ class AjaxController extends Controller
         return response()->json(
             $query->paginate($perPage)
         );
-
     }
 
     /**
@@ -888,7 +920,6 @@ class AjaxController extends Controller
     {
         $approvalStatus = $request->get('status');
         if (!empty($approvalStatus)) {
-
             switch ($approvalStatus) {
                 case self::STATUS_DISAPPROVED:
                     $query->whereNull($table . '.approved_at');
@@ -901,7 +932,6 @@ class AjaxController extends Controller
                     throw new \Exception('Wrong approval status param value');
 
             }
-
         }
 
         return $query;

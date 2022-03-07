@@ -99,6 +99,29 @@ class Accommodation extends Model implements Auditable
         return $this->belongsTo(User::class);
     }
 
+    public function isAlreadyFull() : Bool
+    {
+        return $this->getOccupiedSpace() >= $this->max_guests;
+    }
+
+    public function getOccupiedSpace() : int
+    {
+        return $this->helpRequests->sum('guests_number');
+    }
+
+    public function helpRequests() : BelongsToMany
+    {
+        return $this->belongsToMany(HelpRequest::class, 'allocations', 'accommodation_id', 'help_request_id');
+    }
+
+    /**
+     * @return BelongsTo
+     */
+    public function createdBy()
+    {
+        return $this->belongsTo(User::class);
+    }
+
     /**
      * @return BelongsTo
      */
@@ -188,7 +211,7 @@ class Accommodation extends Model implements Auditable
         return $query->where('is_free', 1);
     }
 
-    public function scopeIsApproved(Builder $query): Builder
+    public function scopeApproved(Builder $query): Builder
     {
         return $query->whereNotNull('approved_at');
     }

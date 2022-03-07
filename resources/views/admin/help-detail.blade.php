@@ -9,6 +9,7 @@
             <h6 class="font-weight-600 text-white mb-0">
                 {{ __('Request Details') }}
             </h6>
+            @include('admin.change-help-status-modal')
             <button class="btn btn-white btn-sm text-danger px-4" id="delete-request-button">{{ __('Delete') }}</button>
         </div>
         <div class="card-body pt-4">
@@ -17,50 +18,72 @@
                 <div class="col-sm-6">
                     <ul class="details-wrapper list-unstyled mb-4">
                         <li class="d-flex align-items-start">
+                            <i class="fa fa-group"></i>
+                            <span>
+                             {{ __("Number of people") }}: {{ $helpRequest->guests_number }}
+                             </span>
+                        </li>
+                        <li class="d-flex align-items-start">
                             <i class="fa fa-map-marker"></i>
                             <span>
-                            Locatie: <b>{{ $helpRequest->city }}</b>, Regiune <b>{{ $helpRequest->county->region_en }} ({{ $helpRequest->county->region_uk }})</b>
-                            </span>
+                             {{ __("Location") }}: {{ $helpRequest->current_location }}
+                             </span>
                         </li>
                         <li class="d-flex">
                             <i class="fa fa-phone"></i>
                             <span>
-                            Telefon: <b>{{ $helpRequest->patient_phone_number }}</b>
-                        </span>
+                             {{ __("Phone") }} <b>{{ $helpRequest->user->phone_number }}</b>
+                         </span>
                         </li>
                         <li class="d-flex">
                             <i class="fa fa-at"></i>
                             <span>
-                            Email:  <a href="mailto:{{ $helpRequest->patient_email }}" target="_blank">{{ $helpRequest->patient_email }}</a>
-                        </span>
-                        </li>
-                    </ul>
-                    <ul class="details-wrapper list-unstyled">
-                        <li class="d-flex align-items-start">
-                            <i class="fa fa-dot-circle-o"></i>
-                            <span>
-                            Responsabil: <b>{{ $helpRequest->caretaker_full_name }}</b>
-                            </span>
+                             {{ __("Email")  }}:  <a href="mailto:{{ $helpRequest->user->email }}" target="_blank">{{ $helpRequest->user->email }}</a>
+                         </span>
                         </li>
                         <li class="d-flex">
-                            <i class="fa fa-phone"></i>
+                            <i class="fa fa-language"></i>
                             <span>
-                            Telefon responsabil: <b>{{ $helpRequest->caretaker_phone_number }}</b>
-                        </span>
+                             {{ __("Known Languages") }}: <b>{{ implode(",", json_decode($helpRequest->known_languages) ?? []) }}</b>
+                         </span>
                         </li>
                         <li class="d-flex">
-                            <i class="fa fa-at"></i>
+                            <i class="fa fa-car"></i>
                             <span>
-                            Email responsabil:  <a href="mailto:{{ $helpRequest->caretaker_email }}" target="_blank">{{ $helpRequest->caretaker_email }}</a>
-                        </span>
+                             {{ __("Transportation") }}: <b> {{ $helpRequest->need_special_transport ? __("Special Transport") :  ($helpRequest->need_car ? __("Need car") : __("No car needed")) }}</b>
+                         </span>
+                        </li>
+                        <li class="d-flex">
+                            <i class="fa fa-wheelchair-alt"></i>
+                            <span>
+                             {{ __("Special Needs") }}: <b> {{ $helpRequest->special_needs }}</b>
+                         </span>
                         </li>
                     </ul>
                 </div>
                 <div class="col-sm-3">
+                <div class="kv">
+                    <p>{{ __("Created At") }}</p>
+                    <b>{{ formatDateTime($helpRequest->created_at) }}</b>
+                </div>
+                @if ($helpRequest->update_at)
                     <div class="kv">
-                        <p>Data:</p>
-                        <b>{{ formatDateTime($helpRequest->created_at) }}</b>
+                        <p>{{ __("Updated At") }}</p>
+                        <b>{{ formatDateTime($helpRequest->updated_at) }}</b>
                     </div>
+                @endif
+                @if ($helpRequest->approved_at)
+                    <div class="kv">
+                        <p>{{ __("Approved At") }}</p>
+                        <b>{{ formatDateTime($helpRequest->approved_at) }}</b>
+                    </div>
+                @endif
+                @if ($helpRequest->deleted_at)
+                    <div class="kv">
+                        <p>{{ __("Deleted At") }}</p>
+                        <b>{{ formatDateTime($helpRequest->deleted_at) }}</b>
+                    </div>
+                @endif
                 </div>
                 <div class="col-sm-3">
                     <div class="kv">
@@ -70,14 +93,27 @@
                 </div>
             </div>
             <div class="border-top border-bottom py-4 mt-4">
-                <h6 class="font-weight-600">{{ __('Diagnostic') }}</h6>
-                <p class="mb-0">{{ $helpRequest->diagnostic }}</p>
+                <h6 class="font-weight-600">{{ __('Other People') }}</h6>
+                @if(count(json_decode($helpRequest->with_peoples)))
+                    <div class="row">
+                        <div class="col-sm-3"><b>{{ __("Name") }}</b></div>
+                        <div class="col-sm-2"><b>{{ __("Age") }}</b></div>
+                        <div class="col-sm-6"><b>{{ __("Mentions") }}</b></div>
+                    </div>
+                @endif
+                @foreach(json_decode($helpRequest->with_peoples) ?? [] as $human)
+                    <div class="row">
+                        <div class="col-sm-3">{{ $human->name }}</div>
+                        <div class="col-sm-2">{{ $human->age }}</div>
+                        <div class="col-sm-6">{{ $human->mentions }}</div>
+                    </div>
+                @endforeach
             </div>
             <div class="border-bottom py-4">
-                <h6 class="font-weight-600">{{ __('Extra details') }}:</h6>
+                <h6 class="font-weight-600">{{ __('More details') }}:</h6>
                 <p class="mb-0">
                     <i>
-                        {{ $helpRequest->extra_details ?? 'N/A' }}
+                        {{ $helpRequest->more_details ?? 'N/A' }}
                     </i>
                 </p>
             </div>
@@ -90,175 +126,6 @@
     ])
 
     </div>
-    @foreach($helpRequest->helptypes as $helpType)
-        <div class="card" id="helpTypeCard{{ $helpType->id }}">
-            <div class="card-body">
-                <h5 class="font-weight-600 text-primary mb-4">{{ __($helpType->name) }}</h5>
-                <div class="row">
-                    <div class="col-sm-5">
-                        @if (\App\HelpType::TYPE_SMS === $helpType->id)
-                            <div class="kv">
-                                <p>{{ __('Estimated amount required for treatment / surgery') }}:</p>
-                                <b>{{ $helpRequest->helprequestsmsdetail()->first()->amount }}</b>
-                            </div>
-                            <div class="kv">
-                                <p>{{ __('Clinic / hospital name where the patient is accepted') }}:</p>
-                                <b>{{ $helpRequest->helprequestsmsdetail()->first()->clinic }}</b>
-                            </div>
-                            <div class="row mt-4">
-                                <div class="col">
-                                    <div class="kv">
-                                        <p>{{ __('Country') }}:</p>
-                                        <b>{{ $helpRequest->helprequestsmsdetail()->first()->country->name }}</b>
-                                    </div>
-                                </div>
-                                <div class="col">
-                                    <div class="kv">
-                                        <p>{{ __('City') }}:</p>
-                                        <b>{{ $helpRequest->helprequestsmsdetail()->first()->city }}</b>
-                                    </div>
-                                </div>
-                            </div>
-                        @elseif (\App\HelpType::TYPE_ACCOMMODATION === $helpType->id)
-                            <div class="kv">
-                                <p>{{ __('At which hospital will the medical investigations / treatment be performed') }}?</p>
-                                <b>{{ $helpRequest->helprequestaccommodationdetail()->first()->clinic }}</b>
-                            </div>
-                            <div class="kv">
-                                <p>{{ __('Starting with what date you need accommodation') }}?</p>
-                                <b>{{ formatDate($helpRequest->helprequestaccommodationdetail()->first()->start_date) }}</b>
-                            </div>
-                            <div class="kv">
-                                <p>{{ __('Detail here if you need special accommodation conditions') }}:</p>
-                                <b>{{ $helpRequest->helprequestaccommodationdetail()->first()->special_request }}</b>
-                            </div>
-                        @elseif (\App\HelpType::TYPE_OTHER_NEEDS === $helpType->id)
-                            <div class="kv">
-                                <b>{{ $helpType->pivot->message }}</b>
-                            </div>
-                        @endif
-                    </div>
-                    <div class="col-sm-4">
-                        @if (\App\HelpType::TYPE_SMS === $helpType->id)
-                            <div class="kv">
-                                <p>{{ __('Fund destination') }}:</p>
-                                <b>{{ $helpRequest->helprequestsmsdetail()->first()->purpose }}</b>
-                            </div>
-                        @elseif (\App\HelpType::TYPE_ACCOMMODATION === $helpType->id)
-                            <div class="kv">
-                                <p>{{ __('For how many people do you need accommodation') }}?</p>
-                                <b>{{ $helpRequest->helprequestaccommodationdetail()->first()->guests_number }}</b>
-                            </div>
-                            <div class="kv">
-                                <p>{{ __('Until when do you need accommodation') }}?</p>
-                                <b>{{ formatDate($helpRequest->helprequestaccommodationdetail()->first()->end_date) }}</b>
-                            </div>
-                        @endif
-                    </div>
-                    <div class="col-sm-3">
-                        <div class="form-group">
-                            <label for="change-approval-{{ $helpType->id }}">Nivel de aprobare:</label>
-                            @php
-                                $newClass = '';
-
-                                if ('pending' === $helpType->pivot->approve_status) {
-                                    $newClass = 'bg-warning border-warning';
-                                } else if ('approved' === $helpType->pivot->approve_status) {
-                                    $newClass = 'bg-success border-success';
-                                } else if ('denied' === $helpType->pivot->approve_status) {
-                                    $newClass = 'bg-danger border-danger';
-                                }
-                            @endphp
-                            <select name="change-approval-{{ $helpType->id }}" id="change-approval-{{ $helpType->id }}" data-type-id="{{ $helpType->id }}" data-identifier="{{ $helpType->pivot->id }}" class="change-approval-status custom-select form-control text-white font-weight-600 {{ $newClass }}">
-                                @foreach(\App\HelpRequestType::approveStatusList() as $key => $value)
-                                    @if (!(\App\HelpRequestType::APPROVE_STATUS_PENDING === $key && \App\HelpRequestType::APPROVE_STATUS_PENDING !== $helpType->pivot->approve_status))
-                                    <option value="{{ $key }}" {{ ($key == $helpType->pivot->approve_status) ? 'selected' : '' }}>{{ __($value) }}</option>
-                                    @endif
-                                @endforeach
-                            </select>
-                        </div>
-
-                        @if (\App\HelpType::TYPE_ACCOMMODATION === $helpType->id)
-                        <div class="form-group">
-                            @if (empty($helpRequest->helprequestaccommodationdetail()->first()->accommodation_id))
-                            <button id="accBookAction" class="form-control font-weight-600 btn btn-secondary text-white btn-md">
-                                {{ __('Book Accommodation') }}
-                            </button>
-                            @else
-                                <button id="accCancelBookAction" class="form-control font-weight-600 btn text-white btn-warning btn-md">
-                                    {{ __('Cancel Booking') }}
-                                </button>
-
-
-
-                                <div class="mt-4">
-                                    <a class="form-control font-weight-600 btn btn-info text-white btn-md" href="{{@route('admin.accommodation-detail', ['id' => $helpRequest->helprequestaccommodationdetail()->first()->accommodation_id])}}">
-                                        Vezi detalii cazare
-                                    </a>
-                                </div>
-                            @endif
-                        </div>
-                        @endif
-                    </div>
-                </div>
-            </div>
-        </div>
-    @endforeach
-
-    @if ($helpRequest->helprequestaccommodationdetail()->first())
-    <!-- Accommodation book modal -->
-    <div class="modal fade bd-example-modal-sm" id="accommodationBookModal" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel" aria-hidden="true" data-content="{{ $helpRequest->helprequestaccommodationdetail()->first()->id }}">
-        <div class="modal-dialog modal-sm">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="exampleModalScrollableTitle">{{ __('Book Accommodation') }}</h5>
-                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
-                <div class="modal-body">
-
-                    <div class="form-group">
-                        <label for="accommodationId">Introdu "{{ __("Accommodation No") }}" pentru a face asocierea.</label>
-
-                        <input id="accommodationId" type="number" class="form-control font-weight-600">
-
-                        <span class="invalid-feedback d-flex d-none" role="alert" id="accommodationBookError"></span>
-
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-link text-dark" data-dismiss="modal" id="cancel">{{ __('Cancel') }}</button>
-                    <button type="button" class="btn btn-secondary" id="proceedAssocAccommodation">{{ __('Yes') }}</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Accommodation cancel book modal -->
-    <div class="modal fade bd-example-modal-sm" id="accommodationCancelBookModal" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel" aria-hidden="true" data-content="{{ $helpRequest->helprequestaccommodationdetail()->first()->id }}">
-        <div class="modal-dialog modal-sm">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="exampleModalScrollableTitle">Anuleaza rezervarea</h5>
-                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
-                <div class="modal-body">
-
-                    <div class="form-group">
-                        <label for="accommodationId">Anulezi rezervarea?</label>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-link text-dark" data-dismiss="modal" id="cancel">{{ __('Cancel') }}</button>
-                    <button type="button" class="btn btn-secondary" id="proceedDeassocAccommodation">{{ __('Yes') }}</button>
-                </div>
-            </div>
-        </div>
-    </div>
-    @endif
 
     <!-- Confirmation modal -->
     <div class="modal fade bd-example-modal-sm" id="confirmationModal" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel" aria-hidden="true">
@@ -308,12 +175,14 @@
         let setRequestStatus = function(status) {
             let badgeColor = 'badge-success';
 
-            if ('new' === status) {
+            if ('padding' === status) {
                 badgeColor = 'badge-danger';
             } else if ('in-progress' === status) {
                 badgeColor = 'badge-warning';
             } else if ('completed' === status) {
                 badgeColor = 'badge-success';
+            } else if ('allocated' === status) {
+                badgeColor = 'badge-warning';
             }
 
             $('#requestStatus span').remove();
@@ -392,10 +261,10 @@
                 axios.defaults.headers.common['X-CSRF-TOKEN'] = '{{ csrf_token() }}';
 
                 axios
-                .delete('/admin/ajax/help-request/{{ $helpRequest->id }}')
+                .delete('/{{ $area }}/ajax/help-request/{{ $helpRequest->id }}')
                 .then(response => {
                     $('#deleteRequestModal').modal('hide');
-                    window.location.replace('{{ route('admin.help-list') }}');
+                    window.location.replace('{{ route( $area . '.help.request.list') }}');
                 })
                 .catch(error => {
                     console.log(error);
@@ -419,7 +288,7 @@
                         _token: "{{ csrf_token() }}"
                     })
                     .then(response => {
-                        window.location.href = '{{ @route('admin.help-detail', ['id' => $helpRequest->id]) }}#helpTypeCard{{ \App\HelpType::TYPE_ACCOMMODATION }}';
+                        window.location.href = '{{ @route('admin.help.request.detail', ['id' => $helpRequest->id]) }}#helpTypeCard{{ \App\HelpType::TYPE_ACCOMMODATION }}';
                         window.location.reload();
                     })
                     .catch(error => {
@@ -437,7 +306,7 @@
                         accommodation_id: accommodationId,
                     })
                     .then(response => {
-                        window.location.href = '{{ @route('admin.help-detail', ['id' => $helpRequest->id]) }}#helpTypeCard{{ \App\HelpType::TYPE_ACCOMMODATION }}';
+                        window.location.href = '{{ @route($area . '.help.request.detail', ['id' => $helpRequest->id]) }}#helpTypeCard{{ \App\HelpType::TYPE_ACCOMMODATION }}';
                         window.location.reload();
                     })
                     .catch(error => {

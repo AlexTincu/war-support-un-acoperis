@@ -3,15 +3,17 @@
 
 namespace App\Services;
 
-
 use App\Http\Requests\HostRequestCompany;
 use App\Http\Requests\HostRequestPerson;
 use App\Http\Requests\ServiceRequest;
+use App\Notifications\UserCreatedNotification;
 use App\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 
 /**
@@ -81,19 +83,22 @@ class UserService
      * @param HostRequestCompany|HostRequestPerson|ServiceRequest $request
      * @return array
      */
-    private function prepareUserParams($request, bool $approved = false): array
+    private function prepareUserParams($request, bool $approved = true): array
     {
+        $attributes = $request->new_user ?? $request->validated();
+
         $userParams = [
-            'name' => $request->get('name'),
-            'email' => $request->get('email'),
+            'name' => $attributes['name'],
+            'email' => $attributes['email'],
             'password' => Hash::make(Str::random(10)),
             'remember_token' => Str::random(10),
-            'country_id' => $request->get('country_id'),
-            'county_id' => $request->get('county_id'),
-            'city' => $request->get('city'),
-            'address' => $request->get('address'),
-            'phone_number' => $request->get('phone'),
-            ];
+            'country_id' => $attributes['country_id'] ?? null,
+            'county_id' => $attributes['county_id'] ?? null,
+            'city' => $attributes['city'],
+            'address' => $attributes['address'] ?? null,
+            'phone_number' => $attributes['phone'] ?? null,
+            'approved_at' => now(),
+        ];
 
         if ($approved)
         {
@@ -103,4 +108,13 @@ class UserService
         return $userParams;
     }
 
+    public function generateResetTokenAndNotifyUser(User $user): void
+    {
+        $resetToken = Password::getRepository()->create($user);
+
+        $notification = new UserCreatedNotification($user, $resetToken);
+
+        Notification::route('mail', $user->email)
+            ->notify($notification);
+    }
 }

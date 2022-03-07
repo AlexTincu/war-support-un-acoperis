@@ -44,6 +44,10 @@ Route::middleware([ShareMiddleware::class])->prefix('/share')->group(function ()
     Route::post('accommodation/store','ShareController@accommodationStore')->name('share.accommodation.store');
     Route::get('help-request','ShareController@helpRequestList')->name('share.help.request.list');
     Route::get('help-request/create','ShareController@helpRequestCreate')->name('share.help.request.create');
+    Route::post('help-request/store','ShareController@helpRequestStore')->name('share.help.request.store');
+    Route::delete('/ajax/help-request/{id}', 'AjaxController@deleteHelpRequestType')->name('ajax.delete-help-requests-type');
+    Route::post('help-request/create-refugee','ShareController@createHelpRequestUser')->name('share.help.request.create.refugee');
+    Route::get('help-request/{id}','ShareController@helpRequestDetail')->name('share.help.request.detail');
     Route::get('ajax/accommodations', 'AjaxController@accommodationList')->name('ajax.accommodation-list');
     Route::get('accommodation/{id}', 'Admin\AccommodationController@view')->name('admin.accommodation-detail');
 });
@@ -66,6 +70,7 @@ Route::middleware([Administration::class])
         Route::get('/user/{id}/approve', 'Admin\UserController@approve')->name('admin.user-approve');
         Route::get('/user/{id}/reset-password', 'Admin\UserController@resetPassword')->name('admin.user-password-reset');
 
+
         Route::get('/clinic', 'Admin\ClinicController@clinicList')->name('admin.clinic-list');
         Route::get('/clinic/add', 'Admin\ClinicController@clinicAdd')->name('admin.clinic-add');
         Route::post('/clinic/add', 'Admin\ClinicController@clinicCreate')->name('admin.clinic-create');
@@ -80,8 +85,8 @@ Route::middleware([Administration::class])
         Route::get('/clinic/category/delete/{id}', 'Admin\ClinicController@clinicCategoryDelete')->name('admin.clinic-category-delete');
         Route::get('/clinic/{id}', 'Admin\ClinicController@clinicDetail')->name('admin-clinic-detail');
 
-        Route::get('/help', 'Admin\HelpRequestController@helpList')->name('admin.help-list');
-        Route::get('/help/{id}', 'Admin\HelpRequestController@helpDetail')->name('admin.help-detail');
+        Route::get('/help-request', 'Admin\HelpRequestController@helpList')->name('admin.help.request.list');
+        Route::get('/help-request/{id}', 'Admin\HelpRequestController@helpDetail')->name('admin.help.request.detail');
 
         Route::get('/resources', 'Admin\ResourceController@resourceList')->name('admin.resource-list');
         Route::get('/resources/{id}/{page?}', 'Admin\ResourceController@resourceDetail')->name('admin.resource-detail');
@@ -91,12 +96,15 @@ Route::middleware([Administration::class])
         Route::post('/accommodation/add/{userId}', 'Admin\AccommodationController@create')->name('admin.accommodation-create');
         Route::get('/accommodation/{id}/edit', 'Admin\AccommodationController@edit')->name('admin.accommodation-edit');
         Route::post('/accommodation/{id}/edit', 'Admin\AccommodationController@update')->name('admin.accommodation-update');
+        Route::get('/accommodation/{id}/approve','Admin\AccommodationController@approve')->name('admin.accommodation-approve');
+        Route::get('/accommodation/{id}/disapprove','Admin\AccommodationController@disapprove')->name('admin.accommodation-disapprove');
 
         Route::get('/host/detail/{id}/{page?}', 'Admin\HostController@detail')
             ->where('page', '[0-9]+')
             ->name('admin.host-detail');
 
         Route::get('/accommodation/{id}/delete', 'Admin\AccommodationController@delete')->name('admin.accommodation-delete');
+        Route::post('/accommodation/{id}/allocate','Admin\AccommodationController@allocate')->name('admin.allocate.user.to.host');
 
         Route::get('/host/add', 'Admin\HostController@add')->name('admin.host-add');
         Route::post('/host/store-person', 'Admin\HostController@storePerson')->name('admin.store-host-person');
@@ -119,7 +127,6 @@ Route::middleware([Administration::class])
         Route::get('/audit-logs-search', 'Admin\AuditLogController@search')->name('admin.auditLogs.search');
 
 
-        Route::post('/allocate-user','AllocateController@index')->name('admin.allocate.user.to.host');
 
 
         /**
@@ -127,6 +134,7 @@ Route::middleware([Administration::class])
          */
         Route::get('/ajax/help-requests', 'AjaxController@helpRequests')->name('ajax.help-requests');
         Route::put('/ajax/help-type/{id}', 'AjaxController@updateHelpRequestType')->name('ajax.update-help-requests-type');
+        Route::post('/ajax/help-type/{id}/status', 'AjaxController@updateHelpRequestStatus')->name('ajax.update-help-requests-status');
         Route::delete('/ajax/help-request/{id}', 'AjaxController@deleteHelpRequestType')->name('ajax.delete-help-requests-type');
         Route::post('/ajax/note/{entityType}/{entityId}', 'AjaxController@createNote')->name('ajax.create-note');
         Route::put('/ajax/note/{id}', 'AjaxController@updateNote')->name('ajax.update-note');
@@ -156,6 +164,7 @@ Route::middleware([Administration::class])
 Route::middleware([Host::class])
     ->prefix('host')
     ->group(function () {
+        Route::get('/', 'Host\ProfileController@home')->name('host.home');
         Route::get('/profile', 'Host\ProfileController@profile')->name('host.profile')->middleware('2fa');
         Route::get('/profile/edit', 'Host\ProfileController@editProfile')->name('host.edit-profile');
         Route::post('/profile/edit', 'Host\ProfileController@saveProfile')->name('host.save-profile');
@@ -182,6 +191,7 @@ Route::middleware([Host::class])
 Route::middleware([Trusted::class])
     ->prefix('trusted')
     ->group(function () {
+        Route::get('/', 'Trusted\TrustedController@home')->name('trusted.home');
         Route::get('/profile', 'Host\ProfileController@profile')->name('trusted.profile')->middleware('2fa');
         Route::get('/profile/edit', 'Host\ProfileController@editProfile')->name('trusted.edit-profile');
         Route::post('/profile/edit', 'Host\ProfileController@saveProfile')->name('trusted.save-profile');
@@ -205,6 +215,7 @@ Route::middleware([Trusted::class])
          * Ajax routes (host)
          */
         Route::delete('/ajax/accommodation/{id}/photo', 'AjaxController@deleteAccommodationPhoto')->name('ajax.delete-accommodation-photo');
+        Route::get('/ajax/help-requests', 'AjaxController@helpRequests')->name('share.ajax.help-requests');
     });
 
 
@@ -214,7 +225,7 @@ Route::middleware([Refugee::class])
     ->group(function () {
         Route::get('/', 'Refugee\ProfileController@home')->name('refugee.home');
         Route::get('/profile', 'Refugee\ProfileController@profile')->name('refugee.profile');
-        Route::get('/accommodation', 'Refugee\ProfileController@accommodation')->name('refugee.accommodation');
+        Route::get('/help-requests', 'Refugee\ProfileController@helpRequests')->name('refugee.help.requests');
         Route::get('/information', 'Refugee\ProfileController@information')->name('refugee.information');
         Route::get('/accommodation/{accommodation}/view', 'Refugee\ProfileController@viewAccommodation')->name('refugee.view-accommodation');
     });
@@ -281,6 +292,8 @@ Route::middleware([SetLocale::class])
         Route::post('/send-contact', 'ContactController@sendContact')->name('send-contact');
         Route::get('/contact-confirmation', 'ContactController@contactConfirmation')->name('contact-confirmation');
         Route::get('/newsletter', 'NewsletterController@newsletter')->name('newsletter');
-
+        Route::get('/terms/refugee', 'StaticPagesController@refugeeTermsAndConditions')->name('terms-refugee');
+        Route::get('/terms/host', 'StaticPagesController@hostTermsAndConditions')->name('terms-host');
+        Route::get('/terms/trusted', 'StaticPagesController@trustedTermsAndConditions')->name('terms-trusted');
         Route::get('/{slug}', 'PageController@show')->name('static.pages');
     });

@@ -41,10 +41,8 @@ class StaticPagesController extends Controller
             ->with('aboutBody', $settingRepository->byKey('about_body'))
             ->with('askServicesTitle', $settingRepository->byKey('ask_services_title'))
             ->with('askServicesBody', $settingRepository->byKey('ask_services_body'))
-            ->with('askServicesLink', $settingRepository->byKey('ask_services_link'))
             ->with('becomeHostTitle', $settingRepository->byKey('become_host_title'))
             ->with('becomeHostBody', $settingRepository->byKey('become_host_body'))
-            ->with('becomeHostLink', $settingRepository->byKey('become_host_link'))
             ->with('footerBlock1Title', $settingRepository->byKey('footer_block_1_title'))
             ->with('footerBlock1Body', $settingRepository->byKey('footer_block_1_body'))
             ->with('footerBlock2Title', $settingRepository->byKey('footer_block_2_title'))
@@ -54,10 +52,39 @@ class StaticPagesController extends Controller
             ->with('providedAccommodations',$providedAccommodations);
     }
 
-
     public function redirectToLocale()
     {
         $locale = app()->getLocale();
         return redirect()->route('home', ['locale' => $locale]);
+    }
+
+    /**
+     * @param SettingRepository $settingRepository
+     * @return View
+     */
+    public function refugeeTermsAndConditions(SettingRepository $settingRepository)
+    {
+        return view('frontend.terms-and-conditions')
+            ->with('termsAndConditions', $settingRepository->byKey('terms_and_conditions_for_refugees') ?? '');
+    }
+
+    /**
+     * @param SettingRepository $settingRepository
+     * @return View
+     */
+    public function hostTermsAndConditions(SettingRepository $settingRepository)
+    {
+        return view('frontend.terms-and-conditions')
+            ->with('termsAndConditions', $settingRepository->byKey('terms_and_conditions_for_hosts') ?? '');
+    }
+
+    /**
+     * @param SettingRepository $settingRepository
+     * @return View
+     */
+    public function trustedTermsAndConditions(SettingRepository $settingRepository)
+    {
+        return view('frontend.terms-and-conditions')
+            ->with('termsAndConditions', $settingRepository->byKey('terms_and_conditions_for_trusted') ?? '');
     }
 }

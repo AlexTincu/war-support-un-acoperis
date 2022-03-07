@@ -6,7 +6,7 @@
             <a class="navbar-brand" href="{{ url('/') }}">
                 <img src="/images/logo.png" height="30" alt="{{ config('app.name', 'Împreună pentru sănătate') }}">
             </a>
-            <h5 class="ml-4 font-weight-600 text-muted d-none d-sm-block">Help for Health Administration</h5>
+
             <!-- Right Side Of Navbar -->
             <button class="navbar-toggler ml-4" type="button" id="sidebar-collapse"
                     aria-label="{{ __('Toggle navigation') }}">
@@ -47,6 +47,10 @@
             <!-- New buttons end -->
         </div>
         <div class="page-wrapper">
+            <div class="px-sm-5 px-3">
+                @include('partials.partners')
+            </div>
+
             <main class="pt-4 p-sm-5">
                 @if(Session::has('success'))
                     <div class="alert alert-secondary d-flex align-items-center">

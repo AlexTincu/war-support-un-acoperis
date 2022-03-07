@@ -1,8 +1,8 @@
 <a href="{{ route('refugee.home') }}"
    class="list-group-item list-group-item-action {{ handleActiveClass('refugee.home*') }}">
-    <i class="fa fa-user mr-3"></i>{{__('General')}}
+    <i class="fa fa-home mr-3"></i>{{__('General')}}
 </a>
-<a href="{{ route('refugee.accommodation') }}"
+<a href="{{ route('refugee.help.requests') }}"
    class="list-group-item list-group-item-action {{ handleActiveClass('refugee.accommodation*') }}">
     <i class="fa fa-bed mr-3"></i>{{__('My Requests')}}
 </a>
