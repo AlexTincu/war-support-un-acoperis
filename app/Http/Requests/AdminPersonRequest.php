@@ -8,10 +8,10 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Route;
 
 /**
- * Class HostRequestPerson
+ * Class AdminPersonRequest
  * @package App\Http\Requests
  */
-class HostRequestPerson extends FormRequest
+class AdminPersonRequest extends FormRequest
 {
     /**
      * Determine if the user is authorized to make this request.
@@ -25,7 +25,7 @@ class HostRequestPerson extends FormRequest
 
     public function rules(): array
     {
-        $validatorRules = [
+        return [
             'new_user.name' => ['required', 'string', 'min:3', 'max:128'],
             'new_user.county_id' => ['required', 'exists:counties,id'],
             'new_user.city' => ['required', 'string', 'min:3', 'max:64'],
@@ -34,12 +34,6 @@ class HostRequestPerson extends FormRequest
             'new_user.email' => ['required', 'email', 'min:5', 'max:64', 'unique:users,email'],
             'new_user.other' => ['nullable', 'string', 'min:2', 'max:256'],
         ];
-
-        if (Route::currentRouteName() == 'store-get-involved') {
-            $validatorRules['g-recaptcha-response'] = ['required', 'captcha'];
-        }
-
-        return $validatorRules;
     }
 
     /**

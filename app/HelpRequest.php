@@ -91,15 +91,19 @@ class HelpRequest extends Model implements Auditable
         return $this->belongsToMany(Accommodation::class, 'allocations', 'help_request_id', 'accommodation_id');
     }
 
+    public function isCompleted(): bool
+    {
+        return $this->accommodation()->sum('number_of_guest') == $this->guests_number;
+    }
+
     public function isAllocated(): bool
     {
         return $this->accommodation()->exists();
     }
 
-
     public function county(): BelongsTo
     {
-        return $this->belongsTo(UaRegion::class);
+        return $this->belongsTo(County::class);
     }
 
     public function helprequestnotes(): HasMany

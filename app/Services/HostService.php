@@ -4,8 +4,8 @@ namespace App\Services;
 
 use App\Country;
 use App\County;
-use App\Http\Requests\HostRequestCompany;
-use App\Http\Requests\HostRequestPerson;
+use App\Http\Requests\HostCompanyRequest;
+use App\Http\Requests\HostPersonRequest;
 use App\Notifications\UserCreatedNotification;
 use App\User;
 use Illuminate\Support\Facades\DB;
@@ -18,7 +18,7 @@ class HostService
 {
 
     /**
-     * @param HostRequestPerson|HostRequestCompany $request
+     * @param HostPersonRequest|HostCompanyRequest $request
      * @return User
      */
     public function createHost($request): User
@@ -26,23 +26,9 @@ class HostService
         $userService = new UserService();
         $user = $userService->createHostUser($request);
 
-        $this->generateResetTokenAndNotifyUser($user);
+        $userService->generateResetTokenAndNotifyUser($user);
 
         return $user;
-    }
-
-    /**
-     * @param User $user
-     * @return void
-     */
-    private function generateResetTokenAndNotifyUser(User $user): void
-    {
-        $resetToken = Password::getRepository()->create($user);
-
-        $notification = new UserCreatedNotification($user, $resetToken);
-
-        Notification::route('mail', $user->email)
-            ->notify($notification);
     }
 
     public function viewSignupForm(string $view, ?string $description = null)

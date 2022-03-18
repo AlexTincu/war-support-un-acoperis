@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Accommodation;
 use App\AccommodationPhoto;
+use App\Allocation;
 use App\City;
 use App\Clinic;
 use App\Country;
@@ -12,8 +13,6 @@ use App\HelpRequestAccommodationDetail;
 use App\HelpRequestType;
 use App\HelpResource;
 use App\HelpResourceType;
-use App\Http\Controllers\Host\ProfileController;
-use App\Http\Middleware\SetLanguage;
 use App\Http\Requests\BookAccommodationRequest;
 use App\Note;
 use App\Services\ChartService;
@@ -21,6 +20,7 @@ use App\UaCity;
 use App\User;
 use Carbon\Carbon;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -37,7 +37,8 @@ use libphonenumber\PhoneNumberUtil;
 class AjaxController extends Controller
 {
     const STATUS_APPROVED = 1;
-    const STATUS_DISAPPROVED = 2;
+    const STATUS_UNAPPROVED = 2;
+
     /**
      * @var ChartService
      */
@@ -81,11 +82,15 @@ class AjaxController extends Controller
      */
     public function helpRequests(Request $request)
     {
-        /** @var Builder $query */
+        /** @var EloquentBuilder $query */
         $query = HelpRequest::orderBy('id', 'desc');
 
         if ($request->has('searchFilter') && strlen($request->get('searchFilter'))) {
             $query->where('users.name', 'LIKE', '%' . $request->get('searchFilter') . '%');
+        }
+
+        if ($request->filled('countyFilter')) {
+            $query->whereHas('county', fn ($q) => $q->where('id', $request->get('countyFilter')));
         }
 
         if (
@@ -117,8 +122,8 @@ class AjaxController extends Controller
             }
         }
 
-        if (auth()->user()->hasRole(User::ROLE_TRUSTED)) {
-            $query->where('created_by', auth()->user()->id);
+        if (auth()->user()->isTrusted()) {
+            $query->where('help_requests.created_by', auth()->user()->id);
         }
 
         $query->select([
@@ -129,7 +134,8 @@ class AjaxController extends Controller
             'help_requests.need_special_transport',
             'help_requests.special_needs',
             'help_requests.guests_number',
-            'help_requests.created_at'
+            'help_requests.created_at',
+            'help_requests.county_id',
         ])->join('users', 'help_requests.user_id', '=', 'users.id');
 
         $perPage = 10;
@@ -372,7 +378,6 @@ class AjaxController extends Controller
 
         if ($request->has('searchFilter') && strlen($request->get('searchFilter'))) {
             $clinicIds = Clinic::search($request->get('searchFilter'))->get()->pluck('id')->toArray();
-//            print_r($clinicIds);
             $query->whereIn('clinics.id', $clinicIds);
         }
 
@@ -641,37 +646,23 @@ class AjaxController extends Controller
      */
     public function accommodationList(Request $request)
     {
-        /** @var Carbon|null $startDate */
-        $startDate = $request->has('startDate') ? new Carbon($request->get('startDate')) : null;
-
-        /** @var Carbon|null $endDate */
-        $endDate = $request->has('endDate') ? new Carbon($request->get('endDate')) : null;
-
         /** @var Builder $query */
         $query = Accommodation::join('countries', 'countries.id', '=', 'accommodations.address_country_id');
         $query->join('counties', 'counties.id', '=', 'accommodations.address_county_id');
         $query->join('users', 'users.id', '=', 'accommodations.user_id');
         $query->join('accommodation_types', 'accommodations.accommodation_type_id', '=', 'accommodation_types.id');
 
-        //@TODO: redo the queries for availability
-//        if (!empty($startDate) && !empty($endDate) && $startDate <= $endDate) {
-//            $query->leftJoin('accommodations_availability_intervals', function($join) use ($startDate, $endDate) {
-//                $join->on('accommodations_availability_intervals.accommodation_id', '=', 'accommodations.id');
-//                $join->where(function($where) use ($startDate, $endDate) {
-//                    $where->where(function ($where2) use ($startDate, $endDate) {
-//                        $where2->where('accommodations_availability_intervals.from_date', '>=', $startDate);
-//                        $where2->where('accommodations_availability_intervals.from_date', '<', $endDate);
-//                    });
-//
-//                    $where->orWhere(function ($where3)  use ($startDate, $endDate) {
-//                        $where3->where('accommodations_availability_intervals.to_date', '>=', $startDate);
-//                        $where3->where('accommodations_availability_intervals.to_date', '<', $endDate);
-//                    });
-//                });
-//            });
-//
-//            $query->whereNull('accommodations_availability_intervals.id');
-//        }
+        /**
+         * @var Carbon|null $startDate
+         * @var Carbon|null $endDate
+         */
+        $startDate = $request->has('startDate') ? new Carbon($request->get('startDate')) : null;
+        $endDate = $request->has('endDate') ? new Carbon($request->get('endDate')) : null;
+        if ($startDate && $endDate) {
+            $query->whereHas('availabilityIntervals', function (EloquentBuilder $q) use ($startDate, $endDate) {
+                $q->whereDateStrictBetween($startDate, $endDate);
+            });
+        }
 
         if ($request->has('type') && !empty($request->get('type'))) {
             $query->where('accommodations.accommodation_type_id', '=', $request->get('type'));
@@ -705,9 +696,10 @@ class AjaxController extends Controller
             'accommodation_types.name as type',
             'users.name as owner',
             'countries.name as country',
-            'counties.name as county',
+            'accommodations.address_county_id as county_id',
             'accommodations.address_city as city',
-            DB::raw('IF (accommodations.approved_at IS NULL, "Disapproved", "Approved") as approval_status')
+            'accommodations.max_guests',
+            DB::raw('IF (accommodations.approved_at IS NULL, "Unapproved", "Approved") as approval_status'),
         ]);
 
         $query->orderBy('accommodations.id', 'desc');
@@ -716,6 +708,13 @@ class AjaxController extends Controller
         $collection = $response->getCollection()
             ->map(function ($item) {
                 $item->owner = htmlentities($item->owner, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                $item->approval_status = __($item->approval_status);
+                $item->occupancy = sprintf(
+                    '%s/%s',
+                    Allocation::where('accommodation_id', $item->id)->sum('number_of_guest'),
+                    $item->max_guests
+                );
+
                 return $item;
             });
         $response->setCollection($collection);
@@ -816,6 +815,12 @@ class AjaxController extends Controller
      */
     public function accommodationRequestsList(int $id, Request $request)
     {
+        /** @var User $user */
+        $user = auth()->user();
+        if (!$user || !$user->hasAnyRole([User::ROLE_HOST, User::ROLE_ADMINISTRATOR, User::ROLE_TRUSTED])) {
+            abort(401);
+        }
+
         /** @var Accommodation|null $query */
         $query = Accommodation::join('allocations', 'allocations.accommodation_id', '=', 'accommodations.id')
             ->join('help_requests', 'allocations.help_request_id', '=', 'help_requests.id')
@@ -841,6 +846,32 @@ class AjaxController extends Controller
         return response()->json(
             $query->paginate($perPage)
         );
+    }
+
+    public function accommodationRequestView(Request $request, int $accommodationId, int $helpRequestId)
+    {
+        /** @var User $user */
+        $user = auth()->user();
+        if (!$user || !$user->hasAnyRole([User::ROLE_HOST, User::ROLE_ADMINISTRATOR, User::ROLE_TRUSTED])) {
+            abort(401);
+        }
+
+        /** @var Accommodation|null $accommodation */
+        $accommodation = Accommodation::find($accommodationId);
+
+        if (!in_array(auth()->user()->id, [$accommodation->user_id, $accommodation->created_by])) {
+            abort(403);
+        }
+
+        $helpRequest = $accommodation->helpRequests()->find($helpRequestId);
+        if (!$helpRequest) {
+            abort(404);
+        }
+
+        return view('host.help-request-detail', [
+            'helpRequest' => $helpRequest,
+            'area'  => 'admin'
+        ]);
     }
 
     public function checkPhone(Request $request)
@@ -896,7 +927,7 @@ class AjaxController extends Controller
             'company_name',
             'city',
             'created_at',
-            DB::raw('IF (users.approved_at IS NULL, "Disapproved", "Approved") as status')
+            DB::raw('IF (users.approved_at IS NULL, "Unapproved", "Approved") as status')
         ]);
 
         $perPage = 10;
@@ -905,8 +936,17 @@ class AjaxController extends Controller
             $perPage = $request->get('perPage');
         }
 
+        $response = $query->paginate($perPage);
+        $collection = $response->getCollection()
+            ->map(function ($item) {
+                $item->status = __($item->status);
+
+                return $item;
+            });
+        $response->setCollection($collection);
+
         return response()->json(
-            $query->paginate($perPage)
+            $response
         );
     }
 
@@ -921,7 +961,7 @@ class AjaxController extends Controller
         $approvalStatus = $request->get('status');
         if (!empty($approvalStatus)) {
             switch ($approvalStatus) {
-                case self::STATUS_DISAPPROVED:
+                case self::STATUS_UNAPPROVED:
                     $query->whereNull($table . '.approved_at');
                     break;
 

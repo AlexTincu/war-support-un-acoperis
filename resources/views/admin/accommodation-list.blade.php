@@ -54,9 +54,12 @@
                         <div class="form-group">
                             <label for="accommodationCounty">{{ __('County') }}</label>
                             <select name="accommodationCounty" id="accommodationCounty" class="custom-select form-control">
-                                <option value="" selected>{{ __('Select county') }}</option>
-                                @foreach($counties as $key => $value)
-                                    <option value="{{ $key }}">{{ $value }}</option>
+                                <option value="" selected>{{ __('All counties') }}</option>
+                                @foreach ($counties as $county)
+                                    <option value="{{ $county->id }}"
+                                        {{ request()->get('accommodationCounty') === $county->id ? 'selected' : '' }}>
+                                        {{ $county->name }}
+                                    </option>
                                 @endforeach
                             </select>
                         </div>
@@ -79,9 +82,9 @@
                         <div class="form-group">
                             <label for="approvalStatus">{{ __('Status') }}</label>
                             <select name="approvalStatus" id="approvalStatus" class="custom-select form-control">
-                                <option value="0" {{ $approvalStatus == 0 ? ' selected' : '' }}>{{ __('All') }}</option>
+                                <option value="0" {{ $approvalStatus == 0 ? ' selected' : '' }}>{{ __('All statuses') }}</option>
                                 <option value="1" {{ $approvalStatus == 1 ? ' selected' : '' }}>{{ __('Approved') }}</option>
-                                <option value="2" {{ $approvalStatus == 2 ? ' selected' : '' }}>{{ __('Disapproved') }}</option>
+                                <option value="2" {{ $approvalStatus == 2 ? ' selected' : '' }}>{{ __('Unapproved') }}</option>
                             </select>
                         </div>
                     </div>
@@ -124,6 +127,7 @@
                         <th>{{ __('County') }}</th>
                         <th>{{ __('City') }}</th>
                         <th>{{ __('Status') }}</th>
+                        <th>{{ __('Accommodation occupancy') }}</th>
                         <th class="text-center">{{ __('Actions') }}</th>
                     </tr>
                     </thead>
@@ -190,14 +194,16 @@
             renderTable(responseData) {
                 this.emptyTable();
 
+                let counties = {!! json_encode($counties->pluck('name', 'id')) !!};
                 $.each(responseData, function(key, value) {
                     let row = '<tr id="accommodation-container-' + value.id + '">\n' +
                         '    <td>#' + value.id + '</td>\n' +
                         '    <td><a href="/share/accommodation/' + value.id + '">' + $.TranslateRequestStatus(value.type) + '</a></td>\n' +
                         '    <td>' + value.owner + '</td>\n' +
-                        '    <td>' + value.county + '</td>\n' +
+                        '    <td>' + (counties[value.county_id] || '&mdash;') + '</td>\n' +
                         '    <td>' + value.city + '</td>\n' +
                         '    <td>' + value.approval_status + '</td>\n' +
+                        '    <td>' + value.occupancy + '</td>\n' +
                         '    <td class="text-right">\n' +
                         '        <a href="#" class="btn btn-sm btn-danger mb-2 mb-sm-0 delete-accommodation" data-id=' + value.id + '>{{ __('Delete') }}</a>\n' +
                         '        <a href="/share/accommodation/' + value.id + '" class="btn btn-sm btn-info mb-2 mb-sm-0">{{ __('Accommodation details') }}</a>\n' +

@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Accommodation;
 use App\AccommodationPhoto;
 use App\AccommodationType;
-use App\AccommodationsAvailabilityIntervals;
+use App\County;
 use App\FacilityType;
 use App\HelpRequest;
 use App\Http\Controllers\Controller;
@@ -15,10 +15,8 @@ use App\Services\AccommodationService;
 use App\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Redirect;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 
 /**
@@ -40,12 +38,11 @@ class AccommodationController extends Controller
     public function accommodationList(Request $request)
     {
         $countries = Accommodation::join('countries', 'countries.id', '=', 'accommodations.address_country_id');
-        $counties = Accommodation::join('counties', 'counties.id', '=', 'accommodations.address_county_id');
 
         return view('admin.accommodation-list')
             ->with('types', AccommodationType::all()->pluck('name', 'id'))
             ->with('countries', $countries->get(['countries.id', 'countries.name'])->pluck('name', 'id')->toArray())
-            ->with('counties', $counties->get(['counties.id', 'counties.name'])->pluck('name', 'id')->toArray())
+            ->with('counties', County::query()->withTranslation()->orderByTranslation('name')->get())
             ->with('cities', Accommodation::all()->pluck('address_city', 'address_city'))
             ->with('approvalStatus', $request->get('status'));
     }
@@ -87,6 +84,7 @@ class AccommodationController extends Controller
             ->with('specialFacilities', $accommodation->accommodationfacilitytypes()->where('type', '=', FacilityType::TYPE_SPECIAL)->get())
             ->with('otherFacilities', $accommodation->accommodationfacilitytypes()->where('type', '=', FacilityType::TYPE_OTHER)->first())
             ->with('availabilityIntervals', $accommodation->availabilityIntervals()->get())
+            ->with('area', 'admin')
             ->with('bookings', $accommodation->bookings()->get());
     }
 
@@ -232,8 +230,7 @@ class AccommodationController extends Controller
     public function allocate(int $id, AllocateRequest $request)
     {
         /** @var Accommodation|null $accommodation */
-        $accommodation = Accommodation::find($id);
-
+        $accommodation = Accommodation::lockForUpdate()->find($id);
         if (empty($accommodation)) {
             abort(404);
         }
@@ -242,12 +239,12 @@ class AccommodationController extends Controller
         }
 
         /** @var HelpRequest $helpRequest */
-        $helpRequest = HelpRequest::find((int)$request->post('help_request_id'));
+        $helpRequest = HelpRequest::lockForUpdate()->find((int)$request->post('help_request_id'));
         if (empty($helpRequest)) {
             return redirect()->back()->withErrors(['help_request_id' => __('There is no help request with this number')]);
         }
 
-        if ($helpRequest->isAllocated()) {
+        if ($helpRequest->isCompleted()) {
             return redirect()->back()->withErrors(['help_request_id' => __('This help request is already resolved')]);
         }
 
@@ -257,7 +254,16 @@ class AccommodationController extends Controller
         }
 
         $accommodation->helpRequests()->attach([$helpRequest->id => ['number_of_guest' => $request->post('guests_number'), 'created_at' => now()]]);
-        return redirect()->back()->with(['message' => __('Operation successful')]);
+
+        $helpRequestTotalAllocated = $request->post('guests_number') + $helpRequest->accommodation()->sum('number_of_guest');
+        if ( $helpRequestTotalAllocated < $helpRequest->guests_number) {
+            $helpRequest->status = HelpRequest::STATUS_PARTIAL_ALLOCATED;
+        } else {
+            $helpRequest->status = HelpRequest::STATUS_COMPLETED;
+        }
+
+        $helpRequest->save();
+        return redirect()->back()->with(['message' => __('Allocation successful')]);
     }
 
     public function disapprove(int $id)

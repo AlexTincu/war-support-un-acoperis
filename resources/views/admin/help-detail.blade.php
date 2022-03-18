@@ -9,8 +9,10 @@
             <h6 class="font-weight-600 text-white mb-0">
                 {{ __('Request Details') }}
             </h6>
-            @include('admin.change-help-status-modal')
-            <button class="btn btn-white btn-sm text-danger px-4" id="delete-request-button">{{ __('Delete') }}</button>
+            <div>
+                @include('admin.change-help-status-modal')
+                <button class="btn btn-white btn-sm text-danger" id="delete-request-button">{{ __('Delete') }}</button>
+            </div>
         </div>
         <div class="card-body pt-4">
             <h4 class="font-weight-600 text-primary mb-5">{{ $helpRequest->patient_full_name }}</h4>
@@ -50,7 +52,7 @@
                         <li class="d-flex">
                             <i class="fa fa-car"></i>
                             <span>
-                             {{ __("Transportation") }}: <b> {{ $helpRequest->need_special_transport ? __("Special Transport") :  ($helpRequest->need_car ? __("Need car") : __("No car needed")) }}</b>
+                             {{ __("Transportation") }}: <b> {{ $helpRequest->need_special_transport ? __("Special transport") :  ($helpRequest->need_car ? __("Need car") : __("No car needed")) }}</b>
                          </span>
                         </li>
                         <li class="d-flex">
@@ -63,24 +65,24 @@
                 </div>
                 <div class="col-sm-3">
                 <div class="kv">
-                    <p>{{ __("Created At") }}</p>
+                    <p>{{ __("Created at") }}</p>
                     <b>{{ formatDateTime($helpRequest->created_at) }}</b>
                 </div>
                 @if ($helpRequest->update_at)
                     <div class="kv">
-                        <p>{{ __("Updated At") }}</p>
+                        <p>{{ __("Updated at") }}</p>
                         <b>{{ formatDateTime($helpRequest->updated_at) }}</b>
                     </div>
                 @endif
                 @if ($helpRequest->approved_at)
                     <div class="kv">
-                        <p>{{ __("Approved At") }}</p>
+                        <p>{{ __("Approved at") }}</p>
                         <b>{{ formatDateTime($helpRequest->approved_at) }}</b>
                     </div>
                 @endif
                 @if ($helpRequest->deleted_at)
                     <div class="kv">
-                        <p>{{ __("Deleted At") }}</p>
+                        <p>{{ __("Deleted at") }}</p>
                         <b>{{ formatDateTime($helpRequest->deleted_at) }}</b>
                     </div>
                 @endif
@@ -173,32 +175,14 @@
 @section('scripts')
     <script>
         let setRequestStatus = function(status) {
-            let badgeColor = 'badge-success';
-
-            if ('padding' === status) {
-                badgeColor = 'badge-danger';
-            } else if ('in-progress' === status) {
-                badgeColor = 'badge-warning';
-            } else if ('completed' === status) {
-                badgeColor = 'badge-success';
-            } else if ('allocated' === status) {
-                badgeColor = 'badge-warning';
-            }
+            let badgeColor = window.helpRequestStatusBadges[status];
 
             $('#requestStatus span').remove();
             $('#requestStatus').append('<span class="badge ' + badgeColor + '">' + $.TranslateRequestStatus(status) + '</span>');
         };
 
         let setRequestTypeStatus = function(id, status) {
-            let newClass = '';
-
-            if ('pending' === status) {
-                newClass = 'bg-warning border-warning';
-            } else if ('approved' === status) {
-                newClass = 'bg-success border-success';
-            } else if ('denied' === status) {
-                newClass = 'bg-danger border-danger';
-            }
+            let newClass = window.helpRequestStatusBadges[status];
 
             $('#change-approval-' + id)
                 .removeClass('bg-danger border-danger bg-warning border-warning bg-success border-warning')

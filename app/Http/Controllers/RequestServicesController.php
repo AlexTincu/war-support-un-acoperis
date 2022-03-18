@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use A17\Twill\Repositories\SettingRepository;
+use App\County;
 use App\Http\Requests\ServiceRequest;
 use App\Language;
 use App\Mail\HelpRequestMail;
@@ -26,6 +27,10 @@ class RequestServicesController extends Controller
 
     public function index(Request $request, SettingRepository $settingRepository)
     {
+        if (auth()->user() && auth()->user()->isRefugee()) {
+            return redirect()->route('request-services-step3');
+        }
+
         if (!$this->seekerTermsAreAgreed($request)) {
             return view('frontend.request-services.terms-and-conditions')
                 ->with('description', $settingRepository->byKey('request_services_description') ?? '')
@@ -49,10 +54,15 @@ class RequestServicesController extends Controller
         }
 
         $languages = Language::orderBy('position', 'asc')->orderBy('name', 'asc')->select('id', 'endonym')->get();
+        $counties = County::query()
+            ->withTranslation()
+            ->orderByTranslation('name')
+            ->get();
 
         return view('frontend.request-services.step3')
             ->with('description', $settingRepository->byKey('request_services_description') ?? '')
             ->with('info', $settingRepository->byKey('request_services_info') ?? '')
+            ->with('counties', $counties)
             ->with('languages', $languages);
     }
 
@@ -71,9 +81,10 @@ class RequestServicesController extends Controller
 
     public function submitStep2(ServiceRequest $request): RedirectResponse
     {
-        $user = (new RefugeeService())->createRefugee($request);
-
-        Auth::login($user);
+        if (! auth()->check() || ! auth()->user()->isRefugee()) {
+            $user = (new RefugeeService())->createRefugee($request);
+            Auth::login($user);
+        }
 
         return redirect()->route('request-services-step3');
     }

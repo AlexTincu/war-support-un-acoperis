@@ -3,17 +3,17 @@
 
 namespace App\Services;
 
-use App\Http\Requests\HostRequestCompany;
-use App\Http\Requests\HostRequestPerson;
+use App\Http\Requests\HostCompanyRequest;
+use App\Http\Requests\HostPersonRequest;
 use App\Http\Requests\ServiceRequest;
 use App\Notifications\UserCreatedNotification;
 use App\User;
-use Illuminate\Support\Carbon;
+use App\UserAttachment;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 /**
@@ -59,28 +59,32 @@ class UserService
     }
 
     /**
-     * @param HostRequestPerson|HostRequestCompany $request
+     * @param HostPersonRequest|HostCompanyRequest $request
      */
     public function createHostUser($request, bool $approved = false): User
     {
         $userParams = $this->prepareUserParams($request, $approved);
         $userParams['country_id'] = self::defaultCountryId;
 
-        if ($request instanceof HostRequestCompany)
-        {
-            $userParams['legal_representative_name'] = $request->get('legal_representative_name');
-            $userParams['company_name'] = $request->get('company_name');
-            $userParams['company_tax_id'] = $request->get('company_tax_id');
-        }
+        DB::beginTransaction();
 
         $user = User::create($userParams);
+        try {
+            $this->addHostIdAttachment($request instanceof HostCompanyRequest ? $request->file('new_user.cui_document') : $request->file('new_user.id_document'), $user);
+        } catch (\Throwable $throwable) {
+            DB::rollBack();
+
+            throw $throwable;
+        }
         $user->assignRole(User::ROLE_HOST);
+
+        DB::commit();
 
         return $user;
     }
 
     /**
-     * @param HostRequestCompany|HostRequestPerson|ServiceRequest $request
+     * @param HostCompanyRequest|HostPersonRequest|ServiceRequest $request
      * @return array
      */
     private function prepareUserParams($request, bool $approved = true): array
@@ -98,23 +102,59 @@ class UserService
             'address' => $attributes['address'] ?? null,
             'phone_number' => $attributes['phone'] ?? null,
             'approved_at' => now(),
+            'created_by' => auth()->user()->id ?? null,
+            'locale' => $attributes['locale'] ?? app()->getLocale(),
         ];
 
-        if ($approved)
-        {
+        if ($request instanceof HostCompanyRequest) {
+            $userParams['legal_representative_name'] = $attributes['legal_representative_name'];
+            $userParams['company_name'] = $attributes['company_name'];
+            $userParams['company_tax_id'] = $attributes['company_tax_id'];
+        }
+
+        if ($approved) {
             $userParams['approved_at'] = now();
         }
 
         return $userParams;
     }
 
+    private function addHostIdAttachment($fileInput, $user)
+    {
+        /** @var UploadedFile $file */
+        $fileName = sha1((string)microtime() . $fileInput->getClientOriginalName()) . $fileInput->getClientOriginalExtension();
+
+        /** @var string $path */
+        $path = Storage::disk('private')->putFile('user_attachments/' . $user->id . '/id-doc/' . $fileName, $fileInput);
+
+        $attachment = new UserAttachment();
+        $attachment->user_id = $user->id;
+        $attachment->name = $fileName;
+        $attachment->identifier = sha1($path);
+        $attachment->path = $path;
+        $attachment->size = $fileInput->getSize();
+        $attachment->extension = '.' . $fileInput->getClientOriginalExtension();
+        $attachment->type = $fileInput->getClientMimeType();
+        $attachment->save();
+    }
+
     public function generateResetTokenAndNotifyUser(User $user): void
     {
-        $resetToken = Password::getRepository()->create($user);
+        $user->notify(
+            new UserCreatedNotification(
+                Password::createToken($user)
+            )
+        );
+    }
 
-        $notification = new UserCreatedNotification($user, $resetToken);
-
-        Notification::route('mail', $user->email)
-            ->notify($notification);
+    public static function getChildrenUsers(): array
+    {
+        if (Auth::check()) {
+            return User::where('created_by', auth()->user()->id)
+                ->orderBy('name', 'ASC')
+                ->get()
+                ->toArray();
+        }
+        return [];
     }
 }

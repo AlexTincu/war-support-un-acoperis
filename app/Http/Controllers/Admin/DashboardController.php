@@ -5,31 +5,43 @@ namespace App\Http\Controllers\Admin;
 use App\Accommodation;
 use App\Allocation;
 use App\HelpRequest;
-use App\HelpRequestType;
 use App\Http\Controllers\Controller;
+use App\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
-use Spatie\Permission\Models\Role;
 
 /**
  * Class DashboardController
+ *
  * @package App\Http\Controllers\Admin
  */
 class DashboardController extends Controller
 {
     /**
-     * @param Request $request
+     * @param  Request  $request
+     *
      * @return View
      */
     public function index(Request $request)
     {
+        $numberOfHosts = User::whereNotNull('approved_at')
+                             ->whereHas('roles', function (Builder $q) {
+                                 $q->where('name', 'host');
+                             })
+                             ->count();
+
+        $allocatedGuests = Allocation::sum('number_of_guest');
+        $totalHostSpaces = Accommodation::approved()->sum('max_guests');
+
         $dashboardStats = [
-            "hostsNumber" => Role::withCount('users')->where('name', 'host')->first()->users_count ?? 0 ,
-            "requestsNumber" => HelpRequest::count(),
-            "allocatedNumber" => Allocation::count(),
-            "approvedAccommodations" => Accommodation::approved()->count(),
+            "availableHostsSpacesNumber"    => $totalHostSpaces - $allocatedGuests,
+            "totalHostsSpacesNumber"        => $totalHostSpaces,
+            "requestsNumber"                => HelpRequest::count(),
+            "allocatedGuestsNumber"         => $allocatedGuests,
+            "approvedAccommodations"        => Accommodation::approved()->count(),
         ];
+
         return view('admin.dashboard')->with('dashboardStats', $dashboardStats);
     }
 }

@@ -4,6 +4,7 @@ namespace App;
 
 use App\Notifications\UserCreatedMessage;
 use DateTime;
+use Illuminate\Contracts\Translation\HasLocalePreference;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -36,8 +37,9 @@ use Spatie\Permission\Traits\HasRoles;
  * @property string|null $phone_number
  * @property ?DateTime $approved_at
  * @property ?HasMany $helpRequest
+ * @property ?HasOne $idDoc
  */
-class User extends Authenticatable implements Auditable
+class User extends Authenticatable implements Auditable, HasLocalePreference
 {
     use Notifiable;
     use HasRoles;
@@ -65,7 +67,7 @@ class User extends Authenticatable implements Auditable
      * @var array
      */
     protected $fillable = [
-        'name', 'email', 'password', 'email_verified_at', 'company_name', 'company_tax_id', 'legal_representative_name', 'country_id', 'county_id', 'city', 'address', 'phone_number', 'approved_at'
+        'name', 'email', 'password', 'email_verified_at', 'company_name', 'company_tax_id', 'legal_representative_name', 'country_id', 'county_id', 'city', 'address', 'phone_number', 'approved_at', 'created_by', 'locale',
     ];
 
     /**
@@ -98,6 +100,11 @@ class User extends Authenticatable implements Auditable
     public function accommodations(): HasMany
     {
         return $this->hasMany(Accommodation::class);
+    }
+
+    public function idDoc(): HasOne
+    {
+        return $this->hasOne(UserAttachment::class);
     }
 
     public function helpRequest(): HasMany
@@ -154,5 +161,15 @@ class User extends Authenticatable implements Auditable
     public function isRefugee(): bool
     {
         return $this->isAuthorized(self::ROLE_REFUGEE);
+    }
+
+    /**
+     * Get the user's preferred locale.
+     *
+     * @return string
+     */
+    public function preferredLocale()
+    {
+        return $this->locale ?? config('translatable.fallback_locale');
     }
 }
